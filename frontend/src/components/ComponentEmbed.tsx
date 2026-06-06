@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildComponentSrcdoc,
   COMPONENT_IFRAME_SANDBOX,
@@ -34,6 +34,7 @@ export function ComponentEmbed({
       ? estimateEmbedSize(data, compact, panel)
       : { width: null, height: panel ? 480 : compact ? 320 : 520 },
   );
+  const [allowHorizontalScroll, setAllowHorizontalScroll] = useState(false);
 
   const shot = screenshotUrl(snapshot?.screenshot_path);
   const srcdoc = useMemo(() => (data ? buildComponentSrcdoc(data) : ""), [data]);
@@ -51,6 +52,37 @@ export function ComponentEmbed({
     if (!data) return;
     setFrameSize(estimateEmbedSize(data, compact, panel));
   }, [data, compact, panel, content]);
+
+  const applyMeasuredSize = useCallback(
+    (contentWidth: number, contentHeight: number) => {
+      const heightBuffer = panel ? 8 : 4;
+      const minHeight = panel ? 48 : compact ? 120 : 160;
+      const maxHeight = panel ? 2400 : compact ? 720 : 900;
+      const nextHeight = Math.min(
+        Math.max(contentHeight + heightBuffer, minHeight),
+        maxHeight,
+      );
+
+      const commitSize = () => {
+        const container = scrollPanelRef.current;
+        const containerWidth = container?.clientWidth ?? 0;
+        const needsHorizontalScroll =
+          panel &&
+          contentWidth > 0 &&
+          containerWidth > 0 &&
+          contentWidth > containerWidth + 2;
+
+        setAllowHorizontalScroll(needsHorizontalScroll);
+        setFrameSize({
+          width: needsHorizontalScroll ? contentWidth : null,
+          height: nextHeight,
+        });
+      };
+
+      requestAnimationFrame(commitSize);
+    },
+    [compact, panel],
+  );
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -76,20 +108,29 @@ export function ComponentEmbed({
 
       if (payload?.type !== "wm-embed-size" || typeof payload.height !== "number") return;
 
-      const padding = 0;
-      const minHeight = panel ? 48 : compact ? 120 : 160;
-      const maxHeight = panel ? 2400 : compact ? 720 : 900;
-      const nextHeight = Math.min(Math.max(payload.height + padding, minHeight), maxHeight);
-      const nextWidth =
-        panel && typeof payload.width === "number" && payload.width > 0
-          ? payload.width + padding
-          : null;
-
-      setFrameSize({ width: nextWidth, height: nextHeight });
+      applyMeasuredSize(
+        typeof payload.width === "number" ? payload.width : 0,
+        payload.height,
+      );
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [compact, panel]);
+  }, [applyMeasuredSize]);
+
+  useEffect(() => {
+    if (!panel) return;
+
+    const container = scrollPanelRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: "wm-embed-request-size" }, "*");
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [panel, srcdoc]);
 
   useEffect(() => {
     if (!panel) return;
@@ -121,10 +162,8 @@ export function ComponentEmbed({
 
   const iframeStyle: React.CSSProperties = {
     height: `${frameSize.height}px`,
+    width: isPanel && !frameSize.width ? "100%" : frameSize.width ? `${frameSize.width}px` : undefined,
   };
-  if (isPanel && frameSize.width) {
-    iframeStyle.width = `${frameSize.width}px`;
-  }
 
   return (
     <div className={rootClass}>
@@ -149,7 +188,7 @@ export function ComponentEmbed({
 
       <div
         ref={scrollPanelRef}
-        className={`component-panel${isPanel ? " component-panel-full component-panel-scroll" : ""}`}
+        className={`component-panel${isPanel ? " component-panel-full component-panel-scroll" : ""}${allowHorizontalScroll ? " component-panel-scroll-x" : ""}`}
       >
         {showEmbed ? (
           <iframe

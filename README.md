@@ -9,24 +9,13 @@ Headless web monitoring dashboard with Playwright, isolated login profiles, and 
 - **Component embed mode** — capture a full DOM subtree with inlined styles and preview it inline
 - **Visual component setup** — load a page, pick a candidate region, and preview before saving (no agent/scripts required)
 - **Login profiles** — isolated browser contexts per account (Playwright `storage_state`)
-- **Headless fetching** — scheduled background checks with APScheduler
+- **Headless fetching** — scheduled background checks with interval timers
 - **React + TypeScript UI** — Vite dev server with HMR
 
 ## Quick start (development)
 
-Terminal 1 — backend API:
-
 ```bash
 cd web-monitor
-uv sync
-uv run playwright install chromium
-uv run web-monitor
-```
-
-Terminal 2 — frontend with hot reload:
-
-```bash
-cd frontend
 npm install
 npm run dev
 ```
@@ -36,12 +25,11 @@ Open **http://localhost:5173** (Vite proxies `/api` to `http://127.0.0.1:8765`).
 ## Production
 
 ```bash
-cd frontend && npm run build
-cd ..
-uv run web-monitor
+npm run build
+npm start
 ```
 
-Open **http://127.0.0.1:8765** — FastAPI serves the built React app from `frontend/dist`.
+Open **http://127.0.0.1:8765** — Express serves the built React app from `frontend/dist`.
 
 ## Configuration
 
@@ -60,7 +48,7 @@ Profile (isolated storage_state)
           └── Snapshot (content + hash + screenshot)
 
 frontend/   React + TypeScript + Vite
-app/        FastAPI + Playwright + SQLite
+server/     Express + Playwright + SQLite
 ```
 
 ## License

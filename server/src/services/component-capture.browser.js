@@ -1,20 +1,9 @@
-COMPONENT_CAPTURE_JS = """
-({ selector, selectorType }) => {
-  const resolveElement = () => {
-    if (selectorType === "xpath") {
-      return document.evaluate(
-        selector,
-        document,
-        null,
-        XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
-      ).singleNodeValue;
-    }
-    return document.querySelector(selector);
-  };
-
-  const source = resolveElement();
-  if (!source || !(source instanceof Element)) {
+/**
+ * Browser-side component capture. Plain JS so Playwright can serialize it.
+ * @param {Element} source
+ */
+export function captureComponentElement(source) {
+  if (!(source instanceof Element)) {
     return null;
   }
 
@@ -26,10 +15,10 @@ COMPONENT_CAPTURE_JS = """
     "margin-bottom", "margin-left", "border-top", "border-right", "border-bottom",
     "border-left", "border-radius", "display", "flex-direction", "flex-wrap",
     "align-items", "justify-content", "gap", "grid-template-columns", "grid-template-rows",
-    "max-width", "max-height", "text-align",
-    "text-decoration", "text-transform", "white-space", "opacity", "box-shadow",
-    "overflow", "overflow-x", "overflow-y", "object-fit", "vertical-align",
-    "list-style-type", "position", "top", "left", "right", "bottom", "z-index", "transform"
+    "max-width", "max-height", "text-align", "text-decoration", "text-transform",
+    "white-space", "opacity", "box-shadow", "overflow", "overflow-x", "overflow-y",
+    "object-fit", "vertical-align", "list-style-type", "position", "top", "left",
+    "right", "bottom", "z-index", "transform",
   ];
 
   const isUsableValue = (value) => {
@@ -38,7 +27,7 @@ COMPONENT_CAPTURE_JS = """
     if (!trimmed || trimmed === "initial" || trimmed === "auto" || trimmed === "normal") {
       return false;
     }
-    if (/var\\s*\\(/i.test(trimmed)) return false;
+    if (/var\s*\(/i.test(trimmed)) return false;
     return true;
   };
 
@@ -52,7 +41,7 @@ COMPONENT_CAPTURE_JS = """
       }
     }
     if (parts.length) {
-      toEl.setAttribute("style", parts.join(";") + ";");
+      toEl.setAttribute("style", `${parts.join(";")};`);
     }
   };
 
@@ -82,10 +71,12 @@ COMPONENT_CAPTURE_JS = """
           const resolved = raw
             .split(",")
             .map((part) => {
-              const bits = part.trim().split(/\\s+/);
+              const bits = part.trim().split(/\s+/);
               try {
                 bits[0] = new URL(bits[0], baseUrl).href;
-              } catch (_) {}
+              } catch {
+                // ignore invalid URL
+              }
               return bits.join(" ");
             })
             .join(", ");
@@ -94,7 +85,9 @@ COMPONENT_CAPTURE_JS = """
         }
         try {
           node.setAttribute(attr, new URL(raw, baseUrl).href);
-        } catch (_) {}
+        } catch {
+          // ignore invalid URL
+        }
       });
     }
   };
@@ -129,4 +122,3 @@ COMPONENT_CAPTURE_JS = """
     capture_height: Math.round(rect.height),
   };
 }
-"""

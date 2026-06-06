@@ -75,11 +75,11 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
     }
     #wm-root {
       display: block;
-      width: fit-content;
-      height: fit-content;
+      width: 100%;
+      height: auto;
       min-height: 0 !important;
       min-width: 0 !important;
-      max-width: max-content;
+      max-width: 100%;
     }
     *, *::before, *::after { box-sizing: border-box; }
     img, video, svg { max-width: 100%; height: auto; }
@@ -108,22 +108,19 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
         });
       }
 
+      function elementBoxSize(el) {
+        var rect = el.getBoundingClientRect();
+        return {
+          width: Math.ceil(Math.max(rect.width, el.scrollWidth, el.offsetWidth, 1)),
+          height: Math.ceil(Math.max(rect.height, el.scrollHeight, el.offsetHeight, 1)),
+        };
+      }
+
       function measureContentSize(root) {
         root.style.setProperty("min-height", "0", "important");
         root.style.setProperty("height", "auto", "important");
         root.style.setProperty("min-width", "0", "important");
         root.style.setProperty("width", "auto", "important");
-
-        if (root.children.length === 1 && root.children[0] instanceof HTMLElement) {
-          var onlyChild = root.children[0];
-          var childRect = onlyChild.getBoundingClientRect();
-          if (childRect.width > 0 && childRect.height > 0) {
-            return {
-              width: Math.ceil(childRect.width),
-              height: Math.ceil(childRect.height),
-            };
-          }
-        }
 
         var rootRect = root.getBoundingClientRect();
         var top = rootRect.top;
@@ -132,6 +129,7 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
         var right = rootRect.right;
 
         root.querySelectorAll("*").forEach(function (el) {
+          if (!(el instanceof HTMLElement)) return;
           var style = window.getComputedStyle(el);
           if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
             return;
@@ -144,9 +142,10 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
           right = Math.max(right, rect.right);
         });
 
+        var bounds = elementBoxSize(root);
         return {
-          width: Math.ceil(Math.max(right - left, 1)),
-          height: Math.ceil(Math.max(bottom - top, 1)),
+          width: Math.ceil(Math.max(right - left, bounds.width, root.scrollWidth, 1)),
+          height: Math.ceil(Math.max(bottom - top, bounds.height, root.scrollHeight, 1)),
         };
       }
 
@@ -179,10 +178,17 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
         reportNaturalSize();
         requestAnimationFrame(reportNaturalSize);
         window.setTimeout(reportNaturalSize, 120);
+        window.setTimeout(reportNaturalSize, 400);
+        window.setTimeout(reportNaturalSize, 900);
       }
 
       window.addEventListener("load", scheduleSizeReports);
       window.addEventListener("resize", reportNaturalSize);
+      window.addEventListener("message", function (event) {
+        if (event.data && event.data.type === "wm-embed-request-size") {
+          reportNaturalSize();
+        }
+      });
 
       if (window.ResizeObserver) {
         new ResizeObserver(reportNaturalSize).observe(document.getElementById("wm-root"));
@@ -207,7 +213,7 @@ export function estimateEmbedSize(
   panel = false,
 ): EmbedSize {
   const width =
-    data.capture_width && data.capture_width > 0 ? data.capture_width + 4 : panel ? null : null;
+    !panel && data.capture_width && data.capture_width > 0 ? data.capture_width + 4 : null;
 
   if (data.capture_height && data.capture_height > 0) {
     const padded = data.capture_height + 4;

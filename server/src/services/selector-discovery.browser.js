@@ -1,19 +1,19 @@
-DISCOVER_SELECTORS_JS = """
-() => {
+/** Browser-side selector discovery for visual component setup. */
+export function discoverSelectors() {
   const MAX = 40;
 
-  function isVisible(el) {
+  const isVisible = (el) => {
     const style = getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
       return false;
     }
     const rect = el.getBoundingClientRect();
     return rect.width >= 56 && rect.height >= 40 && rect.bottom > 0 && rect.top < window.innerHeight;
-  }
+  };
 
-  function cssPath(el) {
-    if (el.id && /^[a-zA-Z][\\w-]*$/.test(el.id)) {
-      return "#" + CSS.escape(el.id);
+  const cssPath = (el) => {
+    if (el.id && /^[a-zA-Z][\w-]*$/.test(el.id)) {
+      return `#${CSS.escape(el.id)}`;
     }
 
     const parts = [];
@@ -23,20 +23,18 @@ DISCOVER_SELECTORS_JS = """
       if (node.classList.length) {
         const cls = Array.from(node.classList)
           .slice(0, 2)
-          .filter(function (name) {
-            return name && !name.includes(":") && !/^\\d/.test(name);
-          })
+          .filter((name) => name && !name.includes(":") && !/^\d/.test(name))
           .join(".");
-        if (cls) part += "." + cls;
+        if (cls) part += `.${cls}`;
       }
 
       const parent = node.parentElement;
       if (parent) {
-        const siblings = Array.from(parent.children).filter(function (child) {
-          return child.tagName === node.tagName;
-        });
+        const siblings = Array.from(parent.children).filter(
+          (child) => child.tagName === node.tagName,
+        );
         if (siblings.length > 1) {
-          part += ":nth-of-type(" + (siblings.indexOf(node) + 1) + ")";
+          part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
         }
       }
 
@@ -46,17 +44,17 @@ DISCOVER_SELECTORS_JS = """
     }
 
     return parts.join(" > ");
-  }
+  };
 
-  function label(el) {
-    const text = (el.innerText || "").trim().replace(/\\s+/g, " ");
+  const label = (el) => {
+    const text = (el.innerText || "").trim().replace(/\s+/g, " ");
     if (text) return text.slice(0, 96);
     const aria = el.getAttribute("aria-label");
     if (aria) return aria.trim().slice(0, 96);
     return el.tagName.toLowerCase();
-  }
+  };
 
-  function score(el, rect) {
+  const score = (el, rect) => {
     let value = 0;
     const className = (el.className || "").toString().toLowerCase();
     const text = (el.innerText || "").trim();
@@ -76,12 +74,14 @@ DISCOVER_SELECTORS_JS = """
     if (area < 4000) value -= 10;
 
     return value;
-  }
+  };
 
   const seen = new Set();
   const candidates = [];
 
-  for (const el of document.querySelectorAll("article, section, aside, main, div, table, form, nav, header, footer, li")) {
+  for (const el of document.querySelectorAll(
+    "article, section, aside, main, div, table, form, nav, header, footer, li",
+  )) {
     if (!(el instanceof Element) || !isVisible(el)) continue;
 
     const selector = cssPath(el);
@@ -89,14 +89,14 @@ DISCOVER_SELECTORS_JS = """
 
     try {
       if (document.querySelectorAll(selector).length !== 1) continue;
-    } catch (_) {
+    } catch {
       continue;
     }
 
     seen.add(selector);
     const rect = el.getBoundingClientRect();
     candidates.push({
-      selector: selector,
+      selector,
       selector_type: "css",
       label: label(el),
       tag: el.tagName.toLowerCase(),
@@ -108,21 +108,16 @@ DISCOVER_SELECTORS_JS = """
     });
   }
 
-  candidates.sort(function (a, b) {
-    return b.score - a.score;
-  });
+  candidates.sort((a, b) => b.score - a.score);
 
-  return candidates.slice(0, MAX).map(function (item) {
-    return {
-      selector: item.selector,
-      selector_type: item.selector_type,
-      label: item.label,
-      tag: item.tag,
-      width: item.width,
-      height: item.height,
-      x: item.x,
-      y: item.y,
-    };
-  });
+  return candidates.slice(0, MAX).map((item) => ({
+    selector: item.selector,
+    selector_type: item.selector_type,
+    label: item.label,
+    tag: item.tag,
+    width: item.width,
+    height: item.height,
+    x: item.x,
+    y: item.y,
+  }));
 }
-"""
