@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_serializer
+
+from app.utils.datetime_utils import as_utc
 
 
 class ProfileCreate(BaseModel):
@@ -25,6 +27,10 @@ class ProfileRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_datetime(self, value: datetime) -> datetime:
+        return as_utc(value) or value
 
 
 class MonitorCreate(BaseModel):
@@ -65,6 +71,10 @@ class MonitorRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("last_fetched_at", "created_at")
+    def serialize_datetime(self, value: datetime | None) -> datetime | None:
+        return as_utc(value) if value is not None else None
+
 
 class SnapshotRead(BaseModel):
     id: int
@@ -78,6 +88,10 @@ class SnapshotRead(BaseModel):
     fetched_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("fetched_at")
+    def serialize_datetime(self, value: datetime) -> datetime:
+        return as_utc(value) or value
 
 
 class DashboardItem(BaseModel):
@@ -97,13 +111,52 @@ class LoginSessionRead(BaseModel):
 
 
 class MonitorPreviewRead(BaseModel):
-    monitor_id: int
+    monitor_id: int | None = None
     url: str
     profile_id: int | None
     profile_name: str | None
     screenshot_path: str | None
+    element_screenshot_path: str | None = None
     final_url: str | None
     page_title: str | None
     selector_content: str | None
+    component_content: str | None = None
+    match_count: int = 0
+    status: str
+    error_message: str | None = None
+
+
+class MonitorDraftPreviewRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+    selector: str = Field(min_length=1, max_length=1024)
+    selector_type: str = "css"
+    extract_mode: str = "component"
+    profile_id: int | None = None
+
+
+class SelectorCandidateRead(BaseModel):
+    selector: str
+    selector_type: str
+    label: str
+    tag: str
+    width: int
+    height: int
+    x: int
+    y: int
+
+
+class DiscoverSelectorsRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+    profile_id: int | None = None
+
+
+class DiscoverSelectorsRead(BaseModel):
+    url: str
+    profile_id: int | None
+    profile_name: str | None = None
+    screenshot_path: str | None
+    final_url: str | None
+    page_title: str | None
+    candidates: list[SelectorCandidateRead]
     status: str
     error_message: str | None = None

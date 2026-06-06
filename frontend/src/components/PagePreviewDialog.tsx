@@ -71,9 +71,12 @@ export function PagePreviewDialog({
         profile_id: null,
         profile_name: profileName,
         screenshot_path: null,
+        element_screenshot_path: null,
         final_url: null,
         page_title: null,
         selector_content: null,
+        component_content: null,
+        match_count: 0,
         status: "error",
         error_message: timedOut
           ? "预览超时，请稍后重试"

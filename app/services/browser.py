@@ -11,6 +11,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, Rout
 
 from app.config import settings
 from app.services.component_capture import COMPONENT_CAPTURE_JS
+from app.services.selector_discovery import DISCOVER_SELECTORS_JS
 
 
 @dataclass
@@ -26,6 +27,19 @@ class PreviewResult:
     final_url: str | None
     page_title: str | None
     selector_content: str | None
+    profile_id: int | None
+    error: str | None = None
+    match_count: int = 0
+    element_screenshot_path: str | None = None
+    component_content: str | None = None
+
+
+@dataclass
+class DiscoverSelectorsResult:
+    screenshot_path: str | None
+    final_url: str | None
+    page_title: str | None
+    candidates: list[dict[str, Any]]
     profile_id: int | None
     error: str | None = None
 
@@ -340,6 +354,7 @@ class BrowserManager:
         profile_id: int | None = None,
         selector: str | None = None,
         selector_type: str = "css",
+        extract_mode: str = "text",
         monitor_id: int | None = None,
     ) -> PreviewResult:
         if profile_id is not None and not self.profile_has_storage(profile_id):
@@ -365,6 +380,12 @@ class BrowserManager:
                 await self._refresh_page(page_entry, url, timeout_ms=timeout_ms)
 
                 selector_content: str | None = None
+                match_count = 0
+                element_screenshot_path: str | None = None
+                component_content: str | None = None
+                stamp = int(asyncio.get_event_loop().time())
+                suffix = f"monitor_{monitor_id}" if monitor_id is not None else "draft"
+
                 if selector:
                     locator = self._resolve_locator(page_entry.page, selector, selector_type)
                     try:
@@ -372,12 +393,41 @@ class BrowserManager:
                             state="visible",
                             timeout=settings.preview_selector_timeout_ms,
                         )
-                        selector_content = (await locator.first.inner_text()).strip()
-                    except Exception:
-                        selector_content = None
+                        match_count = await locator.count()
+                        if extract_mode == "component":
+                            payload = await page_entry.page.evaluate(
+                                COMPONENT_CAPTURE_JS,
+                                {"selector": selector, "selectorType": selector_type},
+                            )
+                            if payload is None:
+                                raise ValueError(f"未找到匹配元素: {selector}")
+                            component_content = json.dumps(payload, ensure_ascii=False)
+                            selector_content = (payload.get("tag_name") or "component") + (
+                                f" · {payload.get('node_count')} 节点"
+                                if payload.get("node_count")
+                                else ""
+                            )
+                        elif extract_mode == "html":
+                            selector_content = await locator.first.inner_html()
+                        else:
+                            selector_content = (await locator.first.inner_text()).strip()
 
-                stamp = int(asyncio.get_event_loop().time())
-                suffix = f"monitor_{monitor_id}" if monitor_id is not None else "page"
+                        element_file = (
+                            settings.screenshots_dir / f"preview_{suffix}_element_{stamp}.png"
+                        )
+                        await locator.first.screenshot(path=str(element_file))
+                        element_screenshot_path = str(element_file)
+                    except Exception as exc:
+                        return PreviewResult(
+                            screenshot_path=None,
+                            final_url=page_entry.page.url,
+                            page_title=await page_entry.page.title(),
+                            selector_content=None,
+                            profile_id=profile_id,
+                            match_count=match_count,
+                            error=str(exc),
+                        )
+
                 screenshot_file = settings.screenshots_dir / f"preview_{suffix}_{stamp}.png"
                 await page_entry.page.screenshot(path=str(screenshot_file), full_page=False)
 
@@ -387,6 +437,9 @@ class BrowserManager:
                     page_title=await page_entry.page.title(),
                     selector_content=selector_content,
                     profile_id=profile_id,
+                    match_count=match_count,
+                    element_screenshot_path=element_screenshot_path,
+                    component_content=component_content,
                 )
         except Exception as exc:  # noqa: BLE001
             if monitor_id is not None and settings.browser_keep_alive:
@@ -396,6 +449,63 @@ class BrowserManager:
                 final_url=None,
                 page_title=None,
                 selector_content=None,
+                profile_id=profile_id,
+                error=str(exc),
+            )
+        finally:
+            if ephemeral:
+                context = page_entry.page.context
+                if not page_entry.page.is_closed():
+                    await page_entry.page.close()
+                if not settings.browser_keep_alive:
+                    await context.close()
+
+    async def discover_selectors(
+        self,
+        url: str,
+        *,
+        profile_id: int | None = None,
+    ) -> DiscoverSelectorsResult:
+        if profile_id is not None and not self.profile_has_storage(profile_id):
+            return DiscoverSelectorsResult(
+                screenshot_path=None,
+                final_url=None,
+                page_title=None,
+                candidates=[],
+                profile_id=profile_id,
+                error="该配置档尚未保存登录状态，请先在「登录配置档」中登录并保存",
+            )
+
+        page_entry, ephemeral = await self._get_page_entry(
+            monitor_id=None,
+            url=url,
+            profile_id=profile_id,
+        )
+
+        try:
+            async with page_entry.lock:
+                timeout_ms = settings.preview_timeout_ms
+                page_entry.page.set_default_timeout(timeout_ms)
+                await self._refresh_page(page_entry, url, timeout_ms=timeout_ms)
+
+                candidates = await page_entry.page.evaluate(DISCOVER_SELECTORS_JS)
+                stamp = int(asyncio.get_event_loop().time())
+                screenshot_file = settings.screenshots_dir / f"discover_{stamp}.png"
+                await page_entry.page.screenshot(path=str(screenshot_file), full_page=False)
+
+                return DiscoverSelectorsResult(
+                    screenshot_path=str(screenshot_file),
+                    final_url=page_entry.page.url,
+                    page_title=await page_entry.page.title(),
+                    candidates=candidates or [],
+                    profile_id=profile_id,
+                )
+        except Exception as exc:  # noqa: BLE001
+            return DiscoverSelectorsResult(
+                screenshot_path=None,
+                final_url=None,
+                page_title=None,
+                candidates=[],
                 profile_id=profile_id,
                 error=str(exc),
             )

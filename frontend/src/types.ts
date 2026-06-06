@@ -68,6 +68,10 @@ export interface ComponentPayload {
   base_url: string;
   tag_name: string;
   node_count: number;
+  stylesheets?: string[];
+  css_variables?: string;
+  capture_width?: number;
+  capture_height?: number;
 }
 
 export interface LoginSessionResponse {
@@ -77,16 +81,50 @@ export interface LoginSessionResponse {
 }
 
 export interface MonitorPreview {
-  monitor_id: number;
+  monitor_id: number | null;
+  url: string;
+  profile_id: number | null;
+  profile_name: string | null;
+  screenshot_path: string | null;
+  element_screenshot_path: string | null;
+  final_url: string | null;
+  page_title: string | null;
+  selector_content: string | null;
+  component_content: string | null;
+  match_count: number;
+  status: string;
+  error_message: string | null;
+}
+
+export interface SelectorCandidate {
+  selector: string;
+  selector_type: string;
+  label: string;
+  tag: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
+export interface DiscoverSelectorsResult {
   url: string;
   profile_id: number | null;
   profile_name: string | null;
   screenshot_path: string | null;
   final_url: string | null;
   page_title: string | null;
-  selector_content: string | null;
+  candidates: SelectorCandidate[];
   status: string;
   error_message: string | null;
+}
+
+export interface MonitorDraftPreviewRequest {
+  url: string;
+  selector: string;
+  selector_type: string;
+  extract_mode: ExtractMode;
+  profile_id: number | null;
 }
 
 export const EXTRACT_MODE_LABELS: Record<string, string> = {

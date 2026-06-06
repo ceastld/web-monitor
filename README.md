@@ -7,6 +7,7 @@ Headless web monitoring dashboard with Playwright, isolated login profiles, and 
 - **Unified dashboard** — view latest captured content from all monitors
 - **Custom selectors** — monitor specific page regions via CSS or XPath
 - **Component embed mode** — capture a full DOM subtree with inlined styles and preview it inline
+- **Visual component setup** — load a page, pick a candidate region, and preview before saving (no agent/scripts required)
 - **Login profiles** — isolated browser contexts per account (Playwright `storage_state`)
 - **Headless fetching** — scheduled background checks with APScheduler
 - **React + TypeScript UI** — Vite dev server with HMR

@@ -4,12 +4,138 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.models import Monitor, Profile, Snapshot
-from app.schemas import MonitorCreate, MonitorPreviewRead, MonitorRead, MonitorUpdate, SnapshotRead
+from app.schemas import (
+    DiscoverSelectorsRead,
+    DiscoverSelectorsRequest,
+    MonitorCreate,
+    MonitorDraftPreviewRequest,
+    MonitorPreviewRead,
+    MonitorRead,
+    MonitorUpdate,
+    SnapshotRead,
+)
 from app.services.browser import browser_manager
 from app.services.monitor_runner import run_monitor
 from app.services.scheduler import monitor_scheduler
 
 router = APIRouter(prefix="/api/monitors", tags=["monitors"])
+
+
+async def _resolve_profile_name(session: AsyncSession, profile_id: int | None) -> str | None:
+    if profile_id is None:
+        return None
+    profile = await session.get(Profile, profile_id)
+    return profile.name if profile else None
+
+
+def _preview_to_read(
+    *,
+    url: str,
+    profile_id: int | None,
+    profile_name: str | None,
+    monitor_id: int | None,
+    result,
+) -> MonitorPreviewRead:
+    if result.error:
+        return MonitorPreviewRead(
+            monitor_id=monitor_id,
+            url=url,
+            profile_id=profile_id,
+            profile_name=profile_name,
+            screenshot_path=result.screenshot_path,
+            element_screenshot_path=result.element_screenshot_path,
+            final_url=result.final_url,
+            page_title=result.page_title,
+            selector_content=result.selector_content,
+            component_content=result.component_content,
+            match_count=result.match_count,
+            status="error",
+            error_message=result.error,
+        )
+
+    return MonitorPreviewRead(
+        monitor_id=monitor_id,
+        url=url,
+        profile_id=profile_id,
+        profile_name=profile_name,
+        screenshot_path=result.screenshot_path,
+        element_screenshot_path=result.element_screenshot_path,
+        final_url=result.final_url,
+        page_title=result.page_title,
+        selector_content=result.selector_content,
+        component_content=result.component_content,
+        match_count=result.match_count,
+        status="success",
+    )
+
+
+@router.post("/discover-selectors", response_model=DiscoverSelectorsRead)
+async def discover_selectors(
+    payload: DiscoverSelectorsRequest,
+    session: AsyncSession = Depends(get_session),
+) -> DiscoverSelectorsRead:
+    if payload.profile_id is not None:
+        profile = await session.get(Profile, payload.profile_id)
+        if profile is None:
+            raise HTTPException(status_code=400, detail="关联的配置档不存在")
+
+    profile_name = await _resolve_profile_name(session, payload.profile_id)
+    result = await browser_manager.discover_selectors(
+        payload.url,
+        profile_id=payload.profile_id,
+    )
+
+    if result.error:
+        return DiscoverSelectorsRead(
+            url=payload.url,
+            profile_id=payload.profile_id,
+            profile_name=profile_name,
+            screenshot_path=result.screenshot_path,
+            final_url=result.final_url,
+            page_title=result.page_title,
+            candidates=[],
+            status="error",
+            error_message=result.error,
+        )
+
+    return DiscoverSelectorsRead(
+        url=payload.url,
+        profile_id=payload.profile_id,
+        profile_name=profile_name,
+        screenshot_path=result.screenshot_path,
+        final_url=result.final_url,
+        page_title=result.page_title,
+        candidates=result.candidates,
+        status="success",
+    )
+
+
+@router.post("/preview-draft", response_model=MonitorPreviewRead)
+async def preview_monitor_draft(
+    payload: MonitorDraftPreviewRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MonitorPreviewRead:
+    if payload.profile_id is not None:
+        profile = await session.get(Profile, payload.profile_id)
+        if profile is None:
+            raise HTTPException(status_code=400, detail="关联的配置档不存在")
+
+    profile_name = await _resolve_profile_name(session, payload.profile_id)
+    result = await browser_manager.preview_page(
+        payload.url,
+        profile_id=payload.profile_id,
+        selector=payload.selector,
+        selector_type=payload.selector_type,
+        extract_mode=payload.extract_mode,
+        monitor_id=None,
+    )
+    return _preview_to_read(
+        url=payload.url,
+        profile_id=payload.profile_id,
+        profile_name=profile_name,
+        monitor_id=None,
+        result=result,
+    )
 
 
 @router.get("", response_model=list[MonitorRead])
@@ -102,43 +228,23 @@ async def preview_monitor(
     if monitor is None:
         raise HTTPException(status_code=404, detail="监控节点不存在")
 
-    profile_name: str | None = None
-    if monitor.profile_id is not None:
-        profile = await session.get(Profile, monitor.profile_id)
-        profile_name = profile.name if profile else None
+    profile_name = await _resolve_profile_name(session, monitor.profile_id)
 
     result = await browser_manager.preview_page(
         monitor.url,
         profile_id=monitor.profile_id,
         selector=monitor.selector,
         selector_type=monitor.selector_type,
+        extract_mode=monitor.extract_mode,
         monitor_id=monitor.id,
     )
 
-    if result.error:
-        return MonitorPreviewRead(
-            monitor_id=monitor.id,
-            url=monitor.url,
-            profile_id=monitor.profile_id,
-            profile_name=profile_name,
-            screenshot_path=result.screenshot_path,
-            final_url=result.final_url,
-            page_title=result.page_title,
-            selector_content=result.selector_content,
-            status="error",
-            error_message=result.error,
-        )
-
-    return MonitorPreviewRead(
-        monitor_id=monitor.id,
+    return _preview_to_read(
         url=monitor.url,
         profile_id=monitor.profile_id,
         profile_name=profile_name,
-        screenshot_path=result.screenshot_path,
-        final_url=result.final_url,
-        page_title=result.page_title,
-        selector_content=result.selector_content,
-        status="success",
+        monitor_id=monitor.id,
+        result=result,
     )
 
 
