@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+data/
+*.db
+.env
+.ruff_cache/
+.DS_Store
+node_modules/
+frontend/dist/
+frontend/node_modules/
+static/
