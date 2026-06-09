@@ -27,7 +27,13 @@ function escapeAttr(value: string): string {
     .replace(/</g, "&lt;");
 }
 
-export function buildComponentSrcdoc(data: ComponentPayload): string {
+export type ComponentEmbedTheme = "light" | "white";
+
+export function buildComponentSrcdoc(
+  data: ComponentPayload,
+  options: { theme?: ComponentEmbedTheme } = {},
+): string {
+  const theme = options.theme ?? "light";
   const baseHref = escapeAttr(data.base_url || "");
   const stylesheetTags = (data.stylesheets ?? [])
     .slice(0, 12)
@@ -42,7 +48,7 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
     html, body {
       margin: 0;
       padding: 0;
-      background: transparent;
+      background: ${theme === "white" ? "#ffffff" : "transparent"};
       color: #262626;
       overflow: hidden;
       scrollbar-width: thin;
@@ -80,6 +86,7 @@ export function buildComponentSrcdoc(data: ComponentPayload): string {
       min-height: 0 !important;
       min-width: 0 !important;
       max-width: 100%;
+      background: ${theme === "white" ? "#ffffff" : "transparent"};
     }
     *, *::before, *::after { box-sizing: border-box; }
     img, video, svg { max-width: 100%; height: auto; }

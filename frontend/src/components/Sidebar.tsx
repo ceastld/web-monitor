@@ -1,9 +1,11 @@
+import { useSetupCapabilities } from "../context/SetupCapabilitiesContext";
 import type { TabId } from "../types";
 
 interface SidebarProps {
   tab: TabId;
   onTabChange: (tab: TabId) => void;
   onRefreshAll: () => void;
+  onQuickSetup: () => void;
 }
 
 const TABS: { id: TabId; label: string }[] = [
@@ -12,7 +14,9 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "profiles", label: "登录配置档" },
 ];
 
-export function Sidebar({ tab, onTabChange, onRefreshAll }: SidebarProps) {
+export function Sidebar({ tab, onTabChange, onRefreshAll, onQuickSetup }: SidebarProps) {
+  const { canUseInteractiveSetup, shortNotice } = useSetupCapabilities();
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -45,7 +49,16 @@ export function Sidebar({ tab, onTabChange, onRefreshAll }: SidebarProps) {
         </button>
       </nav>
       <div className="sidebar-footer desktop-only">
-        <button type="button" className="primary-btn" onClick={onRefreshAll}>
+        <button
+          type="button"
+          className="primary-btn"
+          disabled={!canUseInteractiveSetup}
+          title={!canUseInteractiveSetup ? shortNotice ?? undefined : undefined}
+          onClick={onQuickSetup}
+        >
+          一键添加监控
+        </button>
+        <button type="button" className="ghost-btn sidebar-secondary-btn" onClick={onRefreshAll}>
           立即刷新全部
         </button>
       </div>

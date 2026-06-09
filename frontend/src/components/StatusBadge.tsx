@@ -6,6 +6,7 @@ interface StatusBadgeProps {
 export function StatusBadge({ status, kind = "monitor" }: StatusBadgeProps) {
   if (kind === "login") {
     if (status === "logged_in") return <span className="status success">已登录</span>;
+    if (status === "expired") return <span className="status error">登录失效</span>;
     if (status === "logging_in") return <span className="status warning">登录中</span>;
     return <span className="status pending">未登录</span>;
   }

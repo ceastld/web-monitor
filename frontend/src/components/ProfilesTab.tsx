@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "../api/client";
+import { useSetupCapabilities } from "../context/SetupCapabilitiesContext";
 import { useToast } from "../context/ToastContext";
+import { ChromeImportHint } from "./ChromeImportHint";
+import { SetupNotice } from "./SetupNotice";
+import { useProfileLogin } from "../hooks/useProfileLogin";
 import { PageHeader } from "./PageHeader";
 import { StatusBadge } from "./StatusBadge";
 import type { Profile } from "../types";
@@ -12,6 +16,11 @@ interface ProfilesTabProps {
 
 export function ProfilesTab({ reloadToken, onCreate }: ProfilesTabProps) {
   const { showToast } = useToast();
+  const { canUseInteractiveSetup, canUseChrome, chromeCdp, shortNotice } = useSetupCapabilities();
+  const { importFromChrome } = useProfileLogin({
+    onSuccess: (message) => showToast(message),
+    onError: (message) => showToast(message),
+  });
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
   const load = useCallback(async () => {
@@ -22,10 +31,22 @@ export function ProfilesTab({ reloadToken, onCreate }: ProfilesTabProps) {
     void load();
   }, [load, reloadToken]);
 
+  const importChrome = async (profile: Profile) => {
+    if (!canUseChrome) {
+      showToast(
+        `未连接 Chrome 调试端口。请先关闭所有 Chrome 窗口，再运行：.\\scripts\\launch-chrome-debug.ps1${chromeCdp.hint ? `\n${chromeCdp.hint}` : ""}`,
+      );
+      return;
+    }
+    const ok = await importFromChrome(profile.id);
+    if (ok) await load();
+  };
+
   const startLogin = async (profile: Profile) => {
     try {
       const res = await apiSend<{ message: string }>("POST", `/api/profiles/${profile.id}/login/start`, {
         start_url: `https://${profile.site_domain}`,
+        use_chrome_cdp: canUseChrome,
       });
       showToast(res?.message ?? "已打开登录窗口");
       await load();
@@ -61,13 +82,16 @@ export function ProfilesTab({ reloadToken, onCreate }: ProfilesTabProps) {
     <section className="tab active">
       <PageHeader
         title="登录配置档"
-        subtitle="同一网站可创建多个隔离环境，分别登录不同账号"
+        subtitle="保存的是 Cookie / 本地存储（非账号密码）。已在 Chrome 登录时，可一键导入登录态"
         actions={
           <button type="button" className="primary-btn" onClick={onCreate}>
             新建配置档
           </button>
         }
       />
+
+      {!canUseInteractiveSetup ? <SetupNotice title="交互式登录需在服务器本机操作" /> : null}
+      <ChromeImportHint />
 
       {profiles.length === 0 ? (
         <div className="empty">暂无配置档。为同一网站创建多个配置档，即可隔离登录不同账号。</div>
@@ -96,16 +120,34 @@ export function ProfilesTab({ reloadToken, onCreate }: ProfilesTabProps) {
                       {p.description || "-"}
                     </td>
                     <td className="col-actions" data-label="操作">
+                      {canUseInteractiveSetup ? (
+                        <button
+                          type="button"
+                          className={`small-btn ${canUseChrome ? "primary-btn" : "ghost-btn"}`}
+                          title={
+                            canUseChrome
+                              ? "从本机 Chrome 导入 Cookie"
+                              : "需先运行 scripts/launch-chrome-debug.ps1"
+                          }
+                          onClick={() => void importChrome(p)}
+                        >
+                          从 Chrome 导入
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="small-btn primary-btn"
+                        disabled={!canUseInteractiveSetup}
+                        title={!canUseInteractiveSetup ? shortNotice ?? undefined : undefined}
                         onClick={() => void startLogin(p)}
                       >
-                        打开登录
+                        {canUseChrome ? "在 Chrome 打开" : "打开登录"}
                       </button>
                       <button
                         type="button"
                         className="small-btn ghost-btn"
+                        disabled={!canUseInteractiveSetup}
+                        title={!canUseInteractiveSetup ? shortNotice ?? undefined : undefined}
                         onClick={() => void saveLogin(p.id)}
                       >
                         保存登录状态
@@ -113,9 +155,10 @@ export function ProfilesTab({ reloadToken, onCreate }: ProfilesTabProps) {
                       <button
                         type="button"
                         className="small-btn ghost-btn"
+                        title={p.login_status === "logging_in" ? "结束残留登录会话" : undefined}
                         onClick={() => void cancelLogin(p.id)}
                       >
-                        取消
+                        {p.login_status === "logging_in" ? "结束残留会话" : "取消"}
                       </button>
                       <button
                         type="button"

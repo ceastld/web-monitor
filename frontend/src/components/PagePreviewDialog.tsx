@@ -76,6 +76,7 @@ export function PagePreviewDialog({
         page_title: null,
         selector_content: null,
         component_content: null,
+        render_content: null,
         match_count: 0,
         status: "error",
         error_message: timedOut

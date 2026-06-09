@@ -20,14 +20,56 @@ const profileUpdateSchema = z.object({
 
 const loginStartSchema = z.object({
   start_url: z.string().url().optional(),
+  use_chrome_cdp: z.boolean().optional(),
+});
+
+const profileResolveSchema = z.object({
+  url: z.string().url(),
 });
 
 function storageExists(profileId: number): boolean {
   return browserManager.profileHasStorage(profileId);
 }
 
+function parseSiteDomain(url: string): string {
+  return new URL(url).hostname.toLowerCase();
+}
+
 router.get("", (_req, res) => {
   res.json(profileRepo.list());
+});
+
+router.post("/resolve", (req, res) => {
+  const parsed = profileResolveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ detail: parsed.error.flatten() });
+    return;
+  }
+
+  const siteDomain = parseSiteDomain(parsed.data.url);
+  const existing = profileRepo.getBySiteDomain(siteDomain);
+  if (existing) {
+    res.json({
+      profile: existing,
+      created: false,
+      has_storage: storageExists(existing.id),
+      site_domain: siteDomain,
+    });
+    return;
+  }
+
+  const profile = profileRepo.create({
+    name: siteDomain,
+    site_domain: siteDomain,
+    description: `自动创建于一键配置（${parsed.data.url}）`,
+  });
+
+  res.status(201).json({
+    profile,
+    created: true,
+    has_storage: false,
+    site_domain: siteDomain,
+  });
 });
 
 router.post("", (req, res) => {
@@ -97,8 +139,14 @@ router.post("/:profileId/login/start", async (req, res) => {
 
   const startUrl = parsed.data.start_url ?? `https://${profile.site_domain}`;
 
+  browserManager.reconcileLoginSession(profileId);
+
   try {
-    await browserManager.startLoginSession(profileId, startUrl);
+    await browserManager.startLoginSession(
+      profileId,
+      startUrl,
+      parsed.data.use_chrome_cdp ?? false,
+    );
   } catch (error) {
     res.status(409).json({ detail: error instanceof Error ? error.message : String(error) });
     return;
@@ -108,8 +156,30 @@ router.post("/:profileId/login/start", async (req, res) => {
   res.json({
     profile_id: profileId,
     status: "active",
-    message: `已打开浏览器窗口，请手动登录 ${profile.site_domain}，完成后点击「保存登录状态」`,
+    message: parsed.data.use_chrome_cdp
+      ? `已在你的 Chrome 中打开 ${startUrl}，登录后点击「保存登录状态」`
+      : `已打开浏览器窗口，请手动登录 ${profile.site_domain}，完成后点击「保存登录状态」`,
   });
+});
+
+router.post("/:profileId/import-chrome", async (req, res) => {
+  const profileId = Number(req.params.profileId);
+  const profile = profileRepo.get(profileId);
+  if (!profile) {
+    res.status(404).json({ detail: "配置档不存在" });
+    return;
+  }
+
+  try {
+    const storagePath = await browserManager.importChromeLogin(profileId);
+    const updated = profileRepo.updateLoginStatus(profileId, "logged_in", storagePath);
+    res.json({
+      profile: updated,
+      message: `已从本机 Chrome 导入 ${profile.site_domain} 的登录环境`,
+    });
+  } catch (error) {
+    res.status(400).json({ detail: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 router.post("/:profileId/login/save", async (req, res) => {

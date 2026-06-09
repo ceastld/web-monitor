@@ -1,11 +1,14 @@
 import { useCallback, useState } from "react";
 import { apiGet, apiSend } from "./api/client";
+import { SetupCapabilitiesProvider } from "./context/SetupCapabilitiesContext";
 import { ToastProvider, useToast } from "./context/ToastContext";
+import { SetupNotice } from "./components/SetupNotice";
 import { DashboardTab } from "./components/DashboardTab";
 import { MonitorDialog } from "./components/MonitorDialog";
 import { MonitorsTab } from "./components/MonitorsTab";
 import { ProfileDialog } from "./components/ProfileDialog";
 import { ProfilesTab } from "./components/ProfilesTab";
+import { QuickSetupWizard } from "./components/QuickSetupWizard";
 import { Sidebar } from "./components/Sidebar";
 import type { Monitor, TabId } from "./types";
 
@@ -17,6 +20,7 @@ function AppShell() {
   const [editingMonitorId, setEditingMonitorId] = useState<number | null>(null);
   const [editingMonitor, setEditingMonitor] = useState<Monitor | null>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [quickSetupOpen, setQuickSetupOpen] = useState(false);
 
   const bumpReload = () => setReloadToken((v) => v + 1);
 
@@ -53,8 +57,14 @@ function AppShell() {
 
   return (
     <div className="app">
-      <Sidebar tab={tab} onTabChange={setTab} onRefreshAll={() => void refreshAll()} />
+      <Sidebar
+        tab={tab}
+        onTabChange={setTab}
+        onRefreshAll={() => void refreshAll()}
+        onQuickSetup={() => setQuickSetupOpen(true)}
+      />
       <main className="content">
+        <SetupNotice variant="banner" />
         {tab === "dashboard" ? (
           <DashboardTab
             reloadToken={reloadToken}
@@ -66,6 +76,7 @@ function AppShell() {
           <MonitorsTab
             reloadToken={reloadToken}
             onCreate={openCreateMonitor}
+            onQuickSetup={() => setQuickSetupOpen(true)}
             onEdit={openEditMonitor}
           />
         ) : null}
@@ -79,8 +90,33 @@ function AppShell() {
         monitorId={editingMonitorId}
         initialMonitor={editingMonitor}
         onClose={closeMonitorDialog}
-        onSaved={() => {
-          showToast(editingMonitorId ? "监控节点已更新" : "监控节点已创建");
+        onSaved={async ({ id, isEdit }) => {
+          if (isEdit) {
+            try {
+              await apiSend("POST", `/api/monitors/${id}/fetch`);
+              showToast("监控节点已更新并已重新抓取");
+            } catch (err) {
+              showToast(
+                err instanceof Error ? err.message : "监控节点已更新，但重新抓取失败",
+              );
+            }
+          } else {
+            try {
+              const snapshot = await apiSend<{ status: string }>(
+                "POST",
+                `/api/monitors/${id}/fetch`,
+              );
+              showToast(
+                snapshot?.status === "error"
+                  ? "监控节点已创建，但首次抓取失败"
+                  : "监控节点已创建并完成首次抓取",
+              );
+            } catch (err) {
+              showToast(
+                err instanceof Error ? err.message : "监控节点已创建，但首次抓取失败",
+              );
+            }
+          }
           bumpReload();
         }}
       />
@@ -92,6 +128,14 @@ function AppShell() {
           bumpReload();
         }}
       />
+      <QuickSetupWizard
+        open={quickSetupOpen}
+        onClose={() => setQuickSetupOpen(false)}
+        onCompleted={() => {
+          showToast("一键配置完成");
+          bumpReload();
+        }}
+      />
     </div>
   );
 }
@@ -99,7 +143,9 @@ function AppShell() {
 export default function App() {
   return (
     <ToastProvider>
-      <AppShell />
+      <SetupCapabilitiesProvider>
+        <AppShell />
+      </SetupCapabilitiesProvider>
     </ToastProvider>
   );
 }

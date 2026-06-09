@@ -51,37 +51,42 @@ export function ProfileDialog({ open, onClose, onSaved }: ProfileDialogProps) {
   };
 
   return (
-    <dialog ref={dialogRef} onClose={onClose} onCancel={onClose}>
+    <dialog ref={dialogRef} className="profile-dialog" onClose={onClose} onCancel={onClose}>
       <form onSubmit={(e) => void handleSubmit(e)}>
         <h3>新建登录配置档</h3>
-        <label>
-          名称
-          <input
-            required
-            placeholder="github-工作账号"
-            value={form.name}
-            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-          />
-        </label>
-        <label>
-          站点域名
-          <input
-            required
-            placeholder="github.com"
-            value={form.site_domain}
-            onChange={(e) => setForm((prev) => ({ ...prev, site_domain: e.target.value }))}
-          />
-        </label>
-        <label>
-          说明
-          <textarea
-            rows={2}
-            value={form.description ?? ""}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, description: e.target.value || null }))
-            }
-          />
-        </label>
+        <fieldset className="dialog-fields">
+          <label>
+            名称
+            <input
+              required
+              placeholder="github-工作账号"
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+          </label>
+          <label>
+            站点域名
+            <input
+              required
+              placeholder="github.com"
+              value={form.site_domain}
+              onChange={(e) => setForm((prev) => ({ ...prev, site_domain: e.target.value }))}
+            />
+          </label>
+          <details className="dialog-details">
+            <summary>说明（可选）</summary>
+            <div className="dialog-details-body">
+              <textarea
+                rows={2}
+                placeholder="备注用途或账号说明"
+                value={form.description ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, description: e.target.value || null }))
+                }
+              />
+            </div>
+          </details>
+        </fieldset>
         <div className="dialog-actions">
           <button type="button" className="ghost-btn" onClick={onClose}>
             取消

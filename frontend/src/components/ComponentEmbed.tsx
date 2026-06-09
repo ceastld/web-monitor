@@ -37,7 +37,10 @@ export function ComponentEmbed({
   const [allowHorizontalScroll, setAllowHorizontalScroll] = useState(false);
 
   const shot = screenshotUrl(snapshot?.screenshot_path);
-  const srcdoc = useMemo(() => (data ? buildComponentSrcdoc(data) : ""), [data]);
+  const srcdoc = useMemo(
+    () => (data ? buildComponentSrcdoc(data, { theme: panel ? "white" : "light" }) : ""),
+    [data, panel],
+  );
   const isPanel = panel;
 
   useEffect(() => {

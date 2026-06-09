@@ -1,6 +1,6 @@
 export type TabId = "dashboard" | "monitors" | "profiles";
 
-export type ExtractMode = "text" | "html" | "component";
+export type ExtractMode = "text" | "html" | "component" | "script";
 
 export interface Profile {
   id: number;
@@ -19,6 +19,7 @@ export interface Monitor {
   selector: string;
   selector_type: string;
   extract_mode: ExtractMode;
+  extract_script: string | null;
   profile_id: number | null;
   interval_minutes: number;
   enabled: boolean;
@@ -42,6 +43,7 @@ export interface Snapshot {
 export interface DashboardItem {
   monitor: Monitor;
   profile_name: string | null;
+  profile_login_status?: string | null;
   latest_snapshot: Snapshot | null;
 }
 
@@ -51,9 +53,15 @@ export interface MonitorFormData {
   selector: string;
   selector_type: string;
   extract_mode: ExtractMode;
+  extract_script: string | null;
   profile_id: number | null;
   interval_minutes: number;
   enabled: boolean;
+}
+
+export interface RenderPayload {
+  type: "render";
+  html: string;
 }
 
 export interface ProfileFormData {
@@ -74,11 +82,29 @@ export interface ComponentPayload {
   capture_height?: number;
 }
 
+export interface ChromeCdpStatus {
+  enabled: boolean;
+  url: string;
+  available: boolean;
+  browser_version: string | null;
+  context_count: number;
+  hint: string;
+}
+
 export interface LoginSessionResponse {
   profile_id: number;
   status: string;
   message: string;
 }
+
+export interface ProfileResolveResponse {
+  profile: Profile;
+  created: boolean;
+  has_storage: boolean;
+  site_domain: string;
+}
+
+export type QuickSetupStep = "url" | "login" | "select";
 
 export interface MonitorPreview {
   monitor_id: number | null;
@@ -91,6 +117,7 @@ export interface MonitorPreview {
   page_title: string | null;
   selector_content: string | null;
   component_content: string | null;
+  render_content: string | null;
   match_count: number;
   status: string;
   error_message: string | null;
@@ -105,6 +132,25 @@ export interface SelectorCandidate {
   height: number;
   x: number;
   y: number;
+}
+
+export interface SelectorPickResult {
+  selector: string;
+  selector_type: string;
+  label: string;
+  tag: string;
+  final_url: string | null;
+  page_title: string | null;
+}
+
+export interface SelectorPickSession {
+  session_id: string;
+  status: "starting" | "active" | "picked" | "cancelled" | "error" | "closed";
+  url: string;
+  profile_id: number | null;
+  result: SelectorPickResult | null;
+  error_message: string | null;
+  message: string | null;
 }
 
 export interface DiscoverSelectorsResult {
@@ -124,6 +170,7 @@ export interface MonitorDraftPreviewRequest {
   selector: string;
   selector_type: string;
   extract_mode: ExtractMode;
+  extract_script: string | null;
   profile_id: number | null;
 }
 
@@ -131,4 +178,5 @@ export const EXTRACT_MODE_LABELS: Record<string, string> = {
   text: "文本",
   html: "HTML",
   component: "组件",
+  script: "脚本渲染",
 };

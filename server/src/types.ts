@@ -16,6 +16,7 @@ export interface Monitor {
   selector: string;
   selector_type: string;
   extract_mode: string;
+  extract_script: string | null;
   profile_id: number | null;
   interval_minutes: number;
   enabled: boolean;
@@ -39,6 +40,7 @@ export interface Snapshot {
 export interface DashboardItem {
   monitor: Monitor;
   profile_name: string | null;
+  profile_login_status?: string | null;
   latest_snapshot: Snapshot | null;
 }
 

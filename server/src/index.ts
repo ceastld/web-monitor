@@ -10,6 +10,7 @@ import dashboardRouter from "./routes/dashboard.js";
 import filesRouter from "./routes/files.js";
 import monitorsRouter from "./routes/monitors.js";
 import profilesRouter from "./routes/profiles.js";
+import systemRouter from "./routes/system.js";
 import { browserManager } from "./services/browser.js";
 import { monitorScheduler } from "./services/scheduler.js";
 
@@ -21,6 +22,7 @@ if (settings.corsOrigins.length > 0) {
   app.use(cors({ origin: settings.corsOrigins, credentials: true }));
 }
 
+app.use("/api/system", systemRouter);
 app.use("/api/profiles", profilesRouter);
 app.use("/api/monitors", monitorsRouter);
 app.use("/api/dashboard", dashboardRouter);
@@ -75,7 +77,11 @@ async function main(): Promise<void> {
   await monitorScheduler.start();
 
   const server = app.listen(settings.port, settings.host, () => {
-    console.log(`${settings.appName} listening on http://${settings.host}:${settings.port}`);
+    const port = settings.port;
+    console.log(`${settings.appName} listening on http://localhost:${port}`);
+    if (settings.host === "0.0.0.0") {
+      console.log(`[server] LAN access enabled — use this machine's IP on port ${port}`);
+    }
   });
 
   let shuttingDown = false;

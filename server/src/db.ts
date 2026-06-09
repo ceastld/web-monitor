@@ -30,6 +30,7 @@ function rowToMonitor(row: Record<string, unknown>): Monitor {
     selector: row.selector as string,
     selector_type: row.selector_type as string,
     extract_mode: row.extract_mode as string,
+    extract_script: (row.extract_script as string | null) ?? null,
     profile_id: row.profile_id as number | null,
     interval_minutes: row.interval_minutes as number,
     enabled: Boolean(row.enabled),
@@ -125,6 +126,16 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_snapshots_monitor_id ON snapshots(monitor_id);
     CREATE INDEX IF NOT EXISTS idx_snapshots_fetched_at ON snapshots(fetched_at);
   `);
+
+  migrateMonitorsSchema();
+}
+
+function migrateMonitorsSchema(): void {
+  const database = getDb();
+  const columns = database.prepare("PRAGMA table_info(monitors)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "extract_script")) {
+    database.exec("ALTER TABLE monitors ADD COLUMN extract_script TEXT");
+  }
 }
 
 export function checkpointAndCloseDb(): void {
@@ -150,6 +161,13 @@ export const profileRepo = {
 
   getByName(name: string): Profile | null {
     const row = getDb().prepare("SELECT * FROM profiles WHERE name = ?").get(name);
+    return row ? rowToProfile(row as Record<string, unknown>) : null;
+  },
+
+  getBySiteDomain(siteDomain: string): Profile | null {
+    const row = getDb()
+      .prepare("SELECT * FROM profiles WHERE site_domain = ? ORDER BY id DESC LIMIT 1")
+      .get(siteDomain);
     return row ? rowToProfile(row as Record<string, unknown>) : null;
   },
 
@@ -242,6 +260,7 @@ export const monitorRepo = {
     selector: string;
     selector_type?: string;
     extract_mode?: string;
+    extract_script?: string | null;
     profile_id?: number | null;
     interval_minutes?: number;
     enabled?: boolean;
@@ -249,8 +268,8 @@ export const monitorRepo = {
     const result = getDb()
       .prepare(
         `INSERT INTO monitors
-         (name, url, selector, selector_type, extract_mode, profile_id, interval_minutes, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (name, url, selector, selector_type, extract_mode, extract_script, profile_id, interval_minutes, enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         data.name,
@@ -258,6 +277,7 @@ export const monitorRepo = {
         data.selector,
         data.selector_type ?? "css",
         data.extract_mode ?? "text",
+        data.extract_script ?? null,
         data.profile_id ?? null,
         data.interval_minutes ?? settings.defaultIntervalMinutes,
         data.enabled !== false ? 1 : 0,
@@ -273,6 +293,7 @@ export const monitorRepo = {
       selector: string;
       selector_type: string;
       extract_mode: string;
+      extract_script: string | null;
       profile_id: number | null;
       interval_minutes: number;
       enabled: boolean;
@@ -284,7 +305,7 @@ export const monitorRepo = {
     getDb()
       .prepare(
         `UPDATE monitors SET
-          name = ?, url = ?, selector = ?, selector_type = ?, extract_mode = ?,
+          name = ?, url = ?, selector = ?, selector_type = ?, extract_mode = ?, extract_script = ?,
           profile_id = ?, interval_minutes = ?, enabled = ?
          WHERE id = ?`,
       )
@@ -294,6 +315,7 @@ export const monitorRepo = {
         data.selector ?? existing.selector,
         data.selector_type ?? existing.selector_type,
         data.extract_mode ?? existing.extract_mode,
+        data.extract_script !== undefined ? data.extract_script : existing.extract_script,
         data.profile_id !== undefined ? data.profile_id : existing.profile_id,
         data.interval_minutes ?? existing.interval_minutes,
         data.enabled !== undefined ? (data.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),

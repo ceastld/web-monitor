@@ -14,6 +14,7 @@ const monitorCreateSchema = z.object({
   selector: z.string().min(1).max(1024),
   selector_type: z.string().default("css"),
   extract_mode: z.string().default("text"),
+  extract_script: z.string().max(32_768).nullable().optional(),
   profile_id: z.number().int().nullable().optional(),
   interval_minutes: z.number().int().min(1).max(1440).default(15),
   enabled: z.boolean().default(true),
@@ -25,6 +26,7 @@ const monitorUpdateSchema = z.object({
   selector: z.string().min(1).max(1024).optional(),
   selector_type: z.string().optional(),
   extract_mode: z.string().optional(),
+  extract_script: z.string().max(32_768).nullable().optional(),
   profile_id: z.number().int().nullable().optional(),
   interval_minutes: z.number().int().min(1).max(1440).optional(),
   enabled: z.boolean().optional(),
@@ -35,11 +37,18 @@ const discoverSelectorsSchema = z.object({
   profile_id: z.number().int().nullable().optional(),
 });
 
+const pickSelectorStartSchema = z.object({
+  url: z.string().min(1).max(2048),
+  profile_id: z.number().int().nullable().optional(),
+  use_chrome_cdp: z.boolean().optional(),
+});
+
 const previewDraftSchema = z.object({
   url: z.string().min(1).max(2048),
   selector: z.string().min(1).max(1024),
   selector_type: z.string().default("css"),
   extract_mode: z.string().default("component"),
+  extract_script: z.string().max(32_768).nullable().optional(),
   profile_id: z.number().int().nullable().optional(),
 });
 
@@ -67,6 +76,7 @@ function previewToResponse(options: {
     page_title: result.page_title,
     selector_content: result.selector_content,
     component_content: result.component_content ?? null,
+    render_content: result.render_content ?? null,
     match_count: result.match_count ?? 0,
   };
 
@@ -78,6 +88,46 @@ function previewToResponse(options: {
 
 router.get("", (_req, res) => {
   res.json(monitorRepo.list());
+});
+
+router.post("/pick-selector/start", async (req, res) => {
+  const parsed = pickSelectorStartSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ detail: parsed.error.flatten() });
+    return;
+  }
+
+  if (parsed.data.profile_id != null && !profileRepo.get(parsed.data.profile_id)) {
+    res.status(400).json({ detail: "关联的配置档不存在" });
+    return;
+  }
+
+  try {
+    const session = await browserManager.startPickSelectorSession(
+      parsed.data.url,
+      parsed.data.profile_id ?? null,
+      parsed.data.use_chrome_cdp ?? false,
+    );
+    res.status(201).json(session);
+  } catch (error) {
+    res.status(400).json({
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get("/pick-selector/:sessionId", (req, res) => {
+  const session = browserManager.getPickSelectorSession(req.params.sessionId);
+  if (!session) {
+    res.status(404).json({ detail: "选区会话不存在或已结束" });
+    return;
+  }
+  res.json(session);
+});
+
+router.post("/pick-selector/:sessionId/cancel", async (req, res) => {
+  await browserManager.cancelPickSelectorSession(req.params.sessionId);
+  res.json({ status: "cancelled" });
 });
 
 router.post("/discover-selectors", async (req, res) => {
@@ -142,6 +192,7 @@ router.post("/preview-draft", async (req, res) => {
     selector: parsed.data.selector,
     selector_type: parsed.data.selector_type,
     extract_mode: parsed.data.extract_mode,
+    extract_script: parsed.data.extract_script ?? null,
     monitor_id: null,
   });
 
@@ -237,6 +288,7 @@ router.post("/:monitorId/preview", async (req, res) => {
     selector: monitor.selector,
     selector_type: monitor.selector_type,
     extract_mode: monitor.extract_mode,
+    extract_script: monitor.extract_script,
     monitor_id: monitor.id,
   });
 

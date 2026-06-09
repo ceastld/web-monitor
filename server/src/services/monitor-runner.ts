@@ -20,6 +20,7 @@ export async function runMonitor(monitorId: number): Promise<Snapshot> {
     selector: monitor.selector,
     selector_type: monitor.selector_type,
     extract_mode: monitor.extract_mode,
+    extract_script: monitor.extract_script,
     profile_id: monitor.profile_id,
     monitor_id: monitor.id,
   });
